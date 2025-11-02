@@ -4,13 +4,16 @@ import numpy as np
 import cv2
 from PIL import Image
 from tensorflow.keras.applications import VGG16
+from tensorflow.keras.models import Sequential, Model
+from tensorflow.keras.layers import Input, Conv2D, MaxPooling2D, Flatten, Dense, Dropout
 import io
 
-# --- CRITICAL CONFIGURATION (7-Class VGG16) ---
-MODEL_PATH = 'facial_emotion_vgg16_7class.h5' # Must match the model you uploaded via LFS
+# --- CONFIGURATION (7-Class VGG16) ---
+MODEL_PATH = 'facial_emotion_vgg16_7class.h5' 
 CASCADE_PATH = 'haarcascade_frontalface_default.xml'
 IMG_SIZE = 48
 EMOTIONS = ['Angry', 'Disgust', 'Fear', 'Happy', 'Sad', 'Surprise', 'Neutral'] 
+NUM_CLASSES = 7
 
 st.set_page_config(
     page_title="VGG16 Emotion Recognition", 
@@ -18,27 +21,44 @@ st.set_page_config(
     initial_sidebar_state="collapsed"
 )
 
-# --- 1. MODEL LOADING (CRITICAL FIX APPLIED HERE) ---
+# --- MODEL ARCHITECTURE DEFINITION (REPLICATED FROM TRAINING SCRIPT) ---
+def build_vgg16_transfer_model(input_shape, num_classes):
+    # 1. Load VGG16 Base (Crucial: Must match exact architecture used in training)
+    conv_base = VGG16(weights='imagenet',
+                      include_top=False,
+                      input_shape=input_shape)
+    
+    # Freeze the weights of the VGG16 layers
+    conv_base.trainable = False 
+    
+    # 2. Build Classification Head
+    model = Sequential([
+        conv_base,
+        Flatten(),
+        Dense(512, activation='relu'),
+        Dropout(0.5),
+        Dense(num_classes, activation='softmax') 
+    ])
+    
+    # Do not compile here, as we only need to load the weights.
+    return model
+
+# --- 1. MODEL LOADING (FINAL ROBUST FIX) ---
 @st.cache_resource
 def load_resources():
-    """
-    Loads the model using custom_objects to correctly initialize the VGG16 layer,
-    resolving the 'list' object has no attribute 'shape' error during deployment.
-    """
+    """Builds the architecture and loads weights manually to avoid Keras serialization errors."""
     try:
-        # Suppress TensorFlow warnings/messages during load
         tf.get_logger().setLevel('ERROR') 
         
-        # Define the custom objects map to inform Keras how to handle the VGG16 base layer
-        custom_objects = {"VGG16": VGG16}
+        # 1. Build the empty model architecture
+        input_shape = (IMG_SIZE, IMG_SIZE, 3) 
+        model = build_vgg16_transfer_model(input_shape, NUM_CLASSES)
 
-        # Load the model using the custom_objects argument
-        model = tf.keras.models.load_model(
-            MODEL_PATH, 
-            custom_objects=custom_objects, 
-            compile=False
-        ) 
+        # 2. Load the trained weights onto the matching structure
+        # Use load_weights instead of load_model to bypass serialization issues
+        model.load_weights(MODEL_PATH)
         
+        # Load Haar Cascade
         face_cascade = cv2.CascadeClassifier(CASCADE_PATH)
         
         if face_cascade.empty():
@@ -47,8 +67,8 @@ def load_resources():
              
         return model, face_cascade
     except Exception as e:
-        st.error(f"Failed to load AI Model: {e}")
-        st.warning(f"Check logs. Ensure '{MODEL_PATH}' was pushed with Git LFS.")
+        st.error(f"Failed to load AI Model architecture or weights: {e}")
+        st.warning(f"Check logs. Ensure '{MODEL_PATH}' was pushed with Git LFS and you ran the training script fully.")
         return None, None
 
 model, face_cascade = load_resources()
@@ -58,8 +78,6 @@ def predict_emotion(image, model, face_cascade):
     
     img_array = np.array(image.convert('RGB')) 
     gray_img = cv2.cvtColor(img_array, cv2.COLOR_RGB2GRAY)
-    
-    # Detect faces
     faces = face_cascade.detectMultiScale(
         gray_img, scaleFactor=1.1, minNeighbors=5, minSize=(30, 30)
     )
@@ -95,17 +113,16 @@ def predict_emotion(image, model, face_cascade):
     
     return img_array, len(faces)
 
-# --- 3. STREAMLIT UI ---
+# --- 3. STREAMLIT UI (Unchanged) ---
 def main():
     st.title("🌟 7-Class Facial Emotion Recognition (VGG16)")
     st.subheader("B.Tech AI/DL Project: Transfer Learning Approach")
     st.write("---")
 
     if model is None:
-        st.error("Application setup failed. Please check the deployment logs.")
         st.stop()
     
-    st.info("The model is ready to classify 7 emotions. Focus the demo on Happy/Neutral for $\mathbf{80\%+}$ confidence.")
+    st.info("The model is ready to classify 7 emotions. Demo success should focus on **Happy** and **Neutral** for $\mathbf{80\%+}$ confidence.")
     
     uploaded_file = st.file_uploader(
         "Upload an image file (.jpg, .jpeg, .png) containing faces", 
@@ -143,3 +160,15 @@ def main():
 
 if __name__ == "__main__":
     main()
+```
+eof
+
+### 2. Commit and Redeploy
+
+1.  **Replace** your local `app.py` content with the code above.
+2.  **Commit the change** to your GitHub repository:
+    ```bash
+    git add app.py
+    git commit -m "FINAL FIX: Explicitly defined VGG16 architecture and loads weights only (load_weights)"
+    git push origin main
+    
