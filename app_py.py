@@ -8,7 +8,7 @@ from tensorflow.keras.models import Sequential, Model
 from tensorflow.keras.layers import Input, Conv2D, MaxPooling2D, Flatten, Dense, Dropout
 import io
 
-# --- CONFIGURATION (7-Class VGG16) ---
+# --- CRITICAL CONFIGURATION (7-Class VGG16) ---
 MODEL_PATH = 'facial_emotion_vgg16_7class.h5' 
 CASCADE_PATH = 'haarcascade_frontalface_default.xml'
 IMG_SIZE = 48
@@ -23,7 +23,8 @@ st.set_page_config(
 
 # --- MODEL ARCHITECTURE DEFINITION (REPLICATED FROM TRAINING SCRIPT) ---
 def build_vgg16_transfer_model(input_shape, num_classes):
-    # 1. Load VGG16 Base (Crucial: Must match exact architecture used in training)
+    """Defines the exact model architecture to load the weights correctly."""
+    # 1. Load VGG16 Base
     conv_base = VGG16(weights='imagenet',
                       include_top=False,
                       input_shape=input_shape)
@@ -40,7 +41,7 @@ def build_vgg16_transfer_model(input_shape, num_classes):
         Dense(num_classes, activation='softmax') 
     ])
     
-    # Do not compile here, as we only need to load the weights.
+    # Do not compile, as we only load weights.
     return model
 
 # --- 1. MODEL LOADING (FINAL ROBUST FIX) ---
@@ -68,7 +69,7 @@ def load_resources():
         return model, face_cascade
     except Exception as e:
         st.error(f"Failed to load AI Model architecture or weights: {e}")
-        st.warning(f"Check logs. Ensure '{MODEL_PATH}' was pushed with Git LFS and you ran the training script fully.")
+        st.warning(f"Check logs. Ensure '{MODEL_PATH}' was pushed with Git LFS.")
         return None, None
 
 model, face_cascade = load_resources()
@@ -113,7 +114,7 @@ def predict_emotion(image, model, face_cascade):
     
     return img_array, len(faces)
 
-# --- 3. STREAMLIT UI (Unchanged) ---
+# --- 3. STREAMLIT UI ---
 def main():
     st.title("🌟 7-Class Facial Emotion Recognition (VGG16)")
     st.subheader("B.Tech AI/DL Project: Transfer Learning Approach")
@@ -160,15 +161,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-```
-eof
-
-### 2. Commit and Redeploy
-
-1.  **Replace** your local `app.py` content with the code above.
-2.  **Commit the change** to your GitHub repository:
-    ```bash
-    git add app.py
-    git commit -m "FINAL FIX: Explicitly defined VGG16 architecture and loads weights only (load_weights)"
-    git push origin main
-    
